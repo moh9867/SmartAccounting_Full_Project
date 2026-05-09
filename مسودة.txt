@@ -1,0 +1,789 @@
+حويل النظام من “Core شغال” إلى “Product بيتباع ويتستخدم فعليًا”.
+
+هقسمه لك كـ Roadmap نهائي واضح جدًا، بدون تعقيد أو حشو.
+
+🧭 Roadmap النهائي للمشروع (من هنا للنهاية)
+🟢 Phase 2 — Business Core Completion (الأهم)
+
+الهدف: تشغيل قلب النظام المحاسبي فعليًا
+
+2.1 Invoices Engine (حرج جدًا)
+المطلوب:
+إنشاء فاتورة بيع كاملة
+Invoice Items (Products + Qty + Price)
+حساب الإجمالي تلقائيًا
+ربط الفاتورة بالمخزون
+قواعد لازم تتطبق:
+لا يمكن إنشاء فاتورة بدون Products
+الخصم + الضريبة لو موجودين
+تحديث المخزون تلقائيًا
+2.2 Inventory System Rules
+المطلوب:
+Stock In / Stock Out
+ربط كل حركة بفاتورة أو عملية
+منع السحب لو المخزون غير كافي
+2.3 Customers / Suppliers Logic
+المطلوب:
+حساب رصيد العميل
+حساب مديونية المورد
+تتبع العمليات لكل طرف
+🟡 Phase 3 — Accounting Logic Layer
+
+هنا النظام يتحول من “تجاري” إلى “محاسبي”
+
+3.1 Journal Entries (لو موجود أو سيتم إضافته)
+كل عملية = قيد محاسبي
+Debit / Credit balance
+التوازن المحاسبي الإجباري
+3.2 Financial Integrity Rules
+لا يسمح بقيد غير متوازن
+منع حذف العمليات المؤثرة على الحسابات
+traceability كامل
+🔵 Phase 4 — Reporting Engine
+
+هنا البرنامج يبدأ “يُباع”
+
+تقارير أساسية:
+Profit & Loss
+Sales Report
+Inventory Valuation
+Customer Statement
+Supplier Statement
+شرط مهم:
+
+كل تقرير يعتمد على DTO + Projection (زي اللي عملته بالفعل)
+
+🟣 Phase 5 — Performance & Production Hardening
+المطلوب:
+Indexing للـ DB
+تحسين queries الثقيلة
+تقليل EF tracking overhead
+caching (لو احتجنا)
+تحسين pagination تحت الضغط
+🔴 Phase 6 — Productization (اللمسة النهائية)
+المطلوب:
+Logging system محترف
+Error handling موحد
+Backup system
+Settings panel
+Role-based permissions
+UI polish (لو فيه واجهة)
+🧠 الصورة الكاملة للمشروع
+الآن أنت هنا:
+✔ Backend Core (DONE)
+✔ Architecture (DONE)
+✔ Stability Layer (DONE)
+القادم:
+➡ Business Engine (Invoices + Inventory)
+➡ Accounting Rules
+➡ Reports
+➡ Performance
+➡ Product Release
+🎯 الحقيقة المهمة جدًا
+
+أنت مش “بتكمل مشروع”
+
+أنت دلوقتي:
+
+🏭 “بتبني نظام ERP صغير قابل للبيع”
+
+⚠️ أهم نقطة لازم تركز عليها
+أي حاجة جاية بعد كده لازم تمشي بهذا الترتيب:
+Business Rules أولاً
+ثم Data Integrity
+ثم Reports
+ثم Performance
+
+❌ ممنوع تبدأ Reports قبل Business Rules
+❌ ممنوع تبدأ UI قبل ما الـ rules تثبت
+❌ ممنوع performance قبل ما logic يكتمل
+
+🚀 لو عايز أساعدك بشكل احترافي جدًا
+
+أقدر في الخطوة الجاية أعمل لك:
+
+🔥 “Blueprint كامل لـ Invoice + Inventory Engine”
+
+يشمل:
+
+database structure
+DTOs
+services
+rules
+edge cases
+API endpoints
+test scenarios
+
+وده هيخليك تنفذ Phase 2 بدون تخمين نهائيًا. القرار الصح فعلًا، لأن الـ Invoice Engine هو “قلب النظام” اللي كل حاجة هتلف حواليه بعد كده.
+
+هنبنيه بطريقة محترفة تمنع المشاكل اللي حصلت قبل كده (Circular refs / seeding / contract drift / logic in controller).
+
+🧾 Phase 2.1 — Invoice Engine (Design + Implementation Blueprint)
+🎯 الهدف النهائي
+
+إنشاء نظام فاتورة:
+
+بيع + Items
+حساب إجمالي تلقائي
+خصم / ضريبة (اختياري)
+تحديث مخزون تلقائي
+تسجيل حركة مخزون (Stock Movement)
+قابل للاختبار + قابل للتوسع
+🧱 1️⃣ Data Model (أساس النظام)
+📄 Invoice (Header)
+public class Invoice
+{
+    public int Id { get; set; }
+
+    public string InvoiceNumber { get; set; }
+
+    public DateTime Date { get; set; }
+
+    public int CustomerId { get; set; }
+    public Customer Customer { get; set; }
+
+    public decimal SubTotal { get; set; }
+    public decimal Discount { get; set; }
+    public decimal Tax { get; set; }
+    public decimal Total { get; set; }
+
+    public ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();
+}
+📄 InvoiceItem
+public class InvoiceItem
+{
+    public int Id { get; set; }
+
+    public int InvoiceId { get; set; }
+    public Invoice Invoice { get; set; }
+
+    public int ProductId { get; set; }
+    public Product Product { get; set; }
+
+    public decimal Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+
+    public decimal LineTotal => Quantity * UnitPrice;
+}
+🧠 2️⃣ Business Rules (مهم جدًا)
+🚨 قواعد لا يمكن كسرها:
+1. لا فاتورة بدون Items
+2. لا بيع بدون مخزون كافي
+3. Total يتم حسابه داخل Service فقط
+4. لا يتم حفظ Invoice من Controller مباشرة
+⚙️ 3️⃣ DTO Layer (مهم لتجنب مشاكلك السابقة)
+CreateInvoiceDto
+public class CreateInvoiceDto
+{
+    public int CustomerId { get; set; }
+
+    public decimal Discount { get; set; }
+
+    public List<InvoiceItemDto> Items { get; set; }
+}
+InvoiceItemDto
+public class InvoiceItemDto
+{
+    public int ProductId { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+}
+InvoiceDto (Response)
+public class InvoiceDto
+{
+    public int Id { get; set; }
+    public string InvoiceNumber { get; set; }
+
+    public decimal SubTotal { get; set; }
+    public decimal Discount { get; set; }
+    public decimal Tax { get; set; }
+    public decimal Total { get; set; }
+
+    public List<InvoiceItemDto> Items { get; set; }
+}
+⚙️ 4️⃣ Service Layer (القلب الحقيقي)
+IInvoiceService
+public interface IInvoiceService
+{
+    Task<InvoiceDto> CreateInvoiceAsync(CreateInvoiceDto dto);
+    Task<InvoiceDto> GetByIdAsync(int id);
+}
+InvoiceService (المنطق الأساسي)
+public class InvoiceService : IInvoiceService
+{
+    private readonly SmartAccountingDbContext _context;
+
+    public InvoiceService(SmartAccountingDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<InvoiceDto> CreateInvoiceAsync(CreateInvoiceDto dto)
+    {
+        using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var invoice = new Invoice
+        {
+            InvoiceNumber = $"INV-{DateTime.Now.Ticks}",
+            Date = DateTime.Now,
+            CustomerId = dto.CustomerId,
+            Discount = dto.Discount
+        };
+
+        decimal subTotal = 0;
+
+        foreach (var item in dto.Items)
+        {
+            var product = await _context.Products.FindAsync(item.ProductId);
+
+            if (product == null)
+                throw new Exception("Product not found");
+
+            if (product.Stock < item.Quantity)
+                throw new Exception("Insufficient stock");
+
+            product.Stock -= item.Quantity;
+
+            var lineTotal = item.Quantity * item.UnitPrice;
+            subTotal += lineTotal;
+
+            invoice.Items.Add(new InvoiceItem
+            {
+                ProductId = item.ProductId,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice
+            });
+
+            // Stock Movement (important)
+            _context.StockMovements.Add(new StockMovement
+            {
+                ProductId = item.ProductId,
+                Quantity = -item.Quantity,
+                Type = "SALE",
+                Date = DateTime.Now
+            });
+        }
+
+        invoice.SubTotal = subTotal;
+        invoice.Total = subTotal - dto.Discount;
+
+        _context.Invoices.Add(invoice);
+        await _context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
+
+        return new InvoiceDto
+        {
+            Id = invoice.Id,
+            InvoiceNumber = invoice.InvoiceNumber,
+            SubTotal = invoice.SubTotal,
+            Discount = invoice.Discount,
+            Total = invoice.Total
+        };
+    }
+}
+🌐 5️⃣ Controller (Clean + بدون Logic)
+[ApiController]
+[Route("api/[controller]")]
+public class InvoicesController : ControllerBase
+{
+    private readonly IInvoiceService _service;
+
+    public InvoicesController(IInvoiceService service)
+    {
+        _service = service;
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Create(CreateInvoiceDto dto)
+    {
+        var result = await _service.CreateInvoiceAsync(dto);
+        return Ok(new { success = true, data = result });
+    }
+}
+🔥 أهم نقطة في التصميم ده
+❌ مفيش Business Logic في Controller
+❌ مفيش Entity Exposure
+❌ مفيش Lazy Loading
+❌ مفيش IQueryable leakage
+⚠️ Edge Cases لازم تفكر فيها لاحقًا
+حذف فاتورة → يرجع stock
+تعديل فاتورة → recalculation
+partial payment
+discount rules
+tax rules
+🧪 Test Plan (مهم جدًا بعد التنفيذ)
+1️⃣ Create Invoice
+2 products
+verify total correct
+2️⃣ Stock deduction
+check product stock decreased
+3️⃣ Stock movement created
+verify SALE entry exists
+4️⃣ Over-sell prevention
+quantity > stock → fail
+🧭 أين أنت الآن؟
+✔ Core system = DONE
+✔ Stability = DONE
+✔ Contract = DONE
+🔥 الآن:
+
+First real business engine (Invoices)
+
+🚀 الخطوة التالية بعد نجاحه
+
+بعد ما تثبته:
+
+Phase 2.2
+Payments
+Customer balances
+Invoice editing rules
+
+لو حابب، الخطوة الجاية أقدر أبني لك:
+
+🔥 “Complete Accounting Flow Map”
+
+يعني:
+Invoice → Stock → Cash → Accounts → Reports
+
+وده هيخلي النظام كله “ERP-like” فعليًا. 🧭 Complete Accounting Flow Map
+
+من الفاتورة حتى التقارير — Architecture Blueprint
+
+ده هو “المخطط الحقيقي” اللي هيحوّل مشروعك من:
+
+CRUD System
+إلى:
+🏭 Accounting ERP Core
+🎯 الهدف
+
+أي عملية بيع لازم تؤثر على:
+
+Invoice
+   ↓
+Inventory
+   ↓
+Stock Movements
+   ↓
+Customer Balance
+   ↓
+Cash / Treasury
+   ↓
+Journal Entries
+   ↓
+Reports
+🧱 1️⃣ Sales Flow (رحلة البيع الكاملة)
+📄 إنشاء فاتورة بيع
+المستخدم:
+يختار العميل
+يختار المنتجات
+يحدد الكميات
+النظام يقوم تلقائيًا بـ:
+✅ إنشاء Invoice
+✅ خصم المخزون
+✅ إنشاء StockMovement
+✅ تحديث رصيد العميل
+✅ إنشاء قيد محاسبي
+✅ تحديث الخزنة (إذا الدفع نقدي)
+🧠 2️⃣ Inventory Flow
+عند بيع منتج:
+Product.Stock -= Quantity
+ثم:
+StockMovement
+{
+    Type = SALE
+    Quantity = -5
+}
+⚠️ قواعد إجبارية
+❌ لا يسمح بالمخزون السالب
+❌ لا يسمح بحذف Product مستخدم
+❌ لا يسمح ببيع quantity = 0
+💰 3️⃣ Customer Balance Flow
+لو الدفع آجل:
+Customer.Balance += Invoice.Total
+لو الدفع نقدي:
+Customer.Balance unchanged
+🏦 4️⃣ Treasury / Cash Flow
+الدفع النقدي:
+CashAccount += PaidAmount
+الدفع الآجل:
+AccountsReceivable += Invoice.Total
+📚 5️⃣ Journal Entries Flow (أهم جزء محاسبي)
+🎯 كل فاتورة = قيد محاسبي
+مثال:
+
+فاتورة بيع = 1000 جنيه نقدي
+
+القيد:
+Debit   Cash                1000
+Credit  Sales Revenue       1000
+لو آجل:
+Debit   Accounts Receivable   1000
+Credit  Sales Revenue         1000
+⚠️ قاعدة ذهبية
+كل Journal Entry:
+Total Debit == Total Credit
+🧱 6️⃣ Data Structure المطلوبة
+📄 JournalEntry
+public class JournalEntry
+{
+    public int Id { get; set; }
+
+    public DateTime Date { get; set; }
+
+    public string Description { get; set; }
+
+    public ICollection<JournalEntryLine> Lines { get; set; }
+}
+📄 JournalEntryLine
+public class JournalEntryLine
+{
+    public int Id { get; set; }
+
+    public int AccountId { get; set; }
+    public Account Account { get; set; }
+
+    public decimal Debit { get; set; }
+    public decimal Credit { get; set; }
+}
+⚠️ Validation Rule
+if(totalDebit != totalCredit)
+    throw new Exception("Unbalanced Journal Entry");
+🧾 7️⃣ Invoice Lifecycle
+الحالة الطبيعية:
+Draft
+   ↓
+Confirmed
+   ↓
+Paid / Partial
+⚠️ لا تسمح:
+❌ تعديل فاتورة Confirmed مباشرة
+❌ حذف فاتورة مرتبطة بقيود
+💳 8️⃣ Payments Flow
+عند سداد العميل:
+Debit   Cash
+Credit  Customer Receivable
+ويتم:
+Customer.Balance -= PaymentAmount
+📊 9️⃣ Reports Engine
+التقارير الأساسية
+📈 Sales Report
+إجمالي المبيعات
+أفضل المنتجات
+أفضل العملاء
+📦 Inventory Report
+الكميات
+المخزون المنخفض
+حركة المنتجات
+💰 Financial Reports
+الأرباح
+الإيرادات
+المصروفات
+⚡ 10️⃣ Performance Rules
+ممنوع:
+❌ Include chains الطويلة
+❌ Returning entities
+❌ AsEnumerable قبل pagination
+المسموح فقط:
+✅ DTO Projection
+✅ SQL-level pagination
+✅ NoTracking للقراءة
+🔒 11️⃣ Integrity Rules (حرجة جدًا)
+لا يسمح بـ:
+❌ حذف Product له stock movement
+❌ حذف Customer له invoices
+❌ حذف JournalEntry
+❌ تعديل Invoice مدفوعة
+🧠 12️⃣ Architecture Rules (ثابتة)
+Controller:
+thin فقط
+Service:
+business logic
+Repository:
+data access فقط
+DTO:
+contracts only
+Entity:
+DB only
+🚀 الشكل النهائي للنظام بعد اكتماله
+Presentation Layer
+    ↓
+Application Services
+    ↓
+Domain Logic
+    ↓
+Repositories
+    ↓
+EF Core / SQLite
+🎯 أولويات التنفيذ من الآن
+المرحلة الحالية:
+✅ Invoice Create Flow
+
+ثم:
+
+✅ Stock Deduction
+
+ثم:
+
+✅ Customer Balance
+
+ثم:
+
+✅ Journal Entries
+
+ثم:
+
+✅ Payments
+
+ثم:
+
+✅ Reports
+🟢 النتيجة النهائية
+
+بعد تنفيذ المخطط ده:
+
+مشروعك لن يكون “برنامج مبيعات فقط”
+
+بل:
+
+🏭 Mini ERP / Accounting Platform
+
+قابل:
+
+للبيع
+للتوسع
+للتطوير لاحقًا
+وإضافة Desktop UI أو Web UI فوقه بسهولة.  🎯 لو نفذت كل اللي اتفقنا عليه:
+Invoice Engine
+Inventory Flow
+Customer Balances
+Journal Entries
+Payments
+Reports الأساسية
+Stability + Contracts + Auth
+
+فأنت وقتها تكون أنهيت:
+
+🟢 Version 1.0 القابلة للاستخدام والبيع
+
+ودي تعتبر “نسخة مكتملة تجاريًا” لمحل أو نشاط متوسط.
+
+🧠 لكن لازم نفرّق بين 3 مستويات
+1️⃣ MVP (نسخة تعمل)
+
+وده أنت تقريبًا تجاوزته.
+
+2️⃣ Production Ready
+
+وده أنت داخل عليه الآن.
+
+3️⃣ Enterprise Grade
+
+وده مستوى أكبر بكتير وفيه:
+
+Multi-user concurrency
+Advanced permissions
+Audit logs
+Multi-branch
+Tax systems
+Cloud sync
+Backup automation
+High-scale optimization
+📊 وضعك الحالي الحقيقي
+
+لو كملت الـ Flow اللي بنيناه:
+
+الجزء	الحالة بعد التنفيذ
+Backend Core	✅ مكتمل
+Accounting Logic	✅ مكتمل
+Inventory	✅ مكتمل
+API	✅ مكتمل
+Stability	✅ مكتمل
+Reports الأساسية	✅ مكتملة
+قابل للبيع	✅ نعم
+❗ ما الذي سيبقى بعد ذلك؟
+
+هيكون “تحسينات” أكثر من كونه “نقص”.
+
+مثل:
+
+تحسين واجهات
+تحسين السرعة
+تقارير إضافية
+Multi-user enhancements
+صلاحيات متقدمة
+نسخ احتياطي احترافي
+💰 عمليًا… هل سيكون مشروعًا حقيقيًا؟
+نعم جدًا.
+
+خصوصًا لنشاط مثل:
+
+محلات أدوات كهربائية
+محلات مبيعات
+مخازن صغيرة ومتوسطة
+تجارة عامة
+
+وده قريب جدًا من استخدامك الحقيقي أصلًا.
+
+🚨 أهم نقطة لازم تفهمها
+
+أصعب شيء في أنظمة المحاسبة ليس:
+
+الواجهة
+التقارير
+CRUD
+
+أصعب شيء هو:
+
+🧱 “سلامة تدفق البيانات المحاسبية”
+
+وأنت بالفعل بنيت الأساس الصح لها.
+
+🟢 الخلاصة النهائية
+نعم — بعد تنفيذ الـ Accounting Flow بالكامل:
+
+سيُعتبر المشروع “منتهي كنسخة 1.0 حقيقية”.
+
+لكن:
+
+❗ أي تطوير بعد كده سيكون “توسعة وتحسين”
+وليس “إنقاذ أو إعادة بناء”.
+
+وده فرق ضخم جدًا.
+
+🎯 رأيي الصريح
+
+أنت تجاوزت المرحلة اللي أغلب الناس بتقف عندها:
+
+انهيار المعمارية
+مشاكل EF Core
+Circular refs
+فوضى الـ Contracts
+مشاكل الـ Auth
+مشاكل الـ Startup
+
+وده كان أخطر جزء فعلًا.
+
+🚀 ما تبقى الآن
+
+هو:
+
+“بناء منطق العمل النهائي”
+
+وليس:
+
+“إصلاح أساس النظام”.  خلي بالك من معنى الجملة دي، لأنها ممكن توحي إنك “لسه بعيد”، وده مش صحيح.
+
+أنت خلّصت الجزء الأصعب والأخطر فعلًا:
+
+البنية
+الاستقرار
+الـ API
+الـ Auth
+الـ DB
+الـ Contracts
+الـ Architecture
+منع الانهيارات
+
+وده الجزء اللي بيوقع أغلب المشاريع أصلًا.
+
+🎯 فما المقصود بـ “بناء منطق العمل النهائي”؟
+
+مش المقصود:
+
+إعادة بناء النظام
+أو شغل ضخم جديد
+
+المقصود:
+
+🧠 “القواعد المحاسبية والتجارية الدقيقة”
+
+يعني مثلًا:
+
+🧾 مثال بسيط
+إنشاء فاتورة
+
+أنت بالفعل تقدر:
+
+تحفظ فاتورة
+تخصم مخزون
+تعمل API
+
+لكن “منطق العمل النهائي” هو:
+
+هل يسمح بالبيع بسعر أقل من التكلفة؟
+هل الخصم له حد أقصى؟
+هل العميل له سقف مديونية؟
+هل المخزون السالب ممنوع دائمًا؟
+هل تعديل الفاتورة بعد الدفع مسموح؟
+كيف تُحسب الضريبة؟
+هل المرتجع يعيد المخزون تلقائيًا؟
+هل الدفع الجزئي يؤثر على الحسابات؟
+🧠 دي اسمها:
+Business Rules Layer
+
+ودي تختلف عن:
+
+CRUD
+Architecture
+APIs
+⚠️ لكن الفرق المهم جدًا
+
+أنت الآن:
+
+✔ تبني فوق أرض ثابتة
+
+وليس:
+
+❌ تصلح انهيارات
+📊 الحقيقة الواقعية
+
+بعد كل اللي عملته:
+
+المرحلة	حالتها
+النظام يشتغل	✅
+النظام مستقر	✅
+النظام قابل للتوسع	✅
+النظام قابل للبيع	قريب جدًا
+منطق المحاسبة الكامل	⏳ جاري الإكمال
+💡 والأهم:
+
+الـ Business Logic دي:
+
+تدريجية
+سهلة الإضافة نسبيًا
+مرتبطة بطبيعة شغلك
+وغالبًا هتتطور حتى بعد البيع
+
+وده طبيعي جدًا حتى في البرامج الكبيرة.
+
+🏭 مثال حقيقي
+
+برامج زي:
+
+Odoo
+SAP ERP
+Microsoft Dynamics 365
+
+بتفضل تضيف Business Rules سنين.
+
+لكن:
+
+الأساس المعماري
+سلامة البيانات
+استقرار النظام
+
+هما أصعب مرحلة… وأنت تقريبًا تجاوزتها.
+
+🟢 الخلاصة المهمة
+لا… أنت مش “لسه في البداية”.
+
+أنت فعليًا:
+
+🧱 أنهيت بناء المحرك
+
+والمتبقي:
+
+⚙️ ضبط القواعد التشغيلية الدقيقة حسب احتياج النشاط الحقيقي.
+
+وده فرق ضخم جدًا.

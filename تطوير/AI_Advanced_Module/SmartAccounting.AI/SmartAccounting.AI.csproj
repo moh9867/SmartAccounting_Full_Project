@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SmartAccounting.AI</RootNamespace>
+    <AssemblyName>SmartAccounting.AI</AssemblyName>
+  </PropertyGroup>
+
+  <!-- ===================================================
+       حزم NuGet المطلوبة
+       أضف هذا المشروع بـ: dotnet add reference
+       =================================================== -->
+  <ItemGroup>
+    <!-- ML.NET الأساسية -->
+    <PackageReference Include="Microsoft.ML"                         Version="3.0.1" />
+    <PackageReference Include="Microsoft.ML.FastTree"                Version="3.0.1" />
+    <PackageReference Include="Microsoft.ML.TimeSeries"              Version="3.0.1" />
+
+    <!-- Entity Framework Core -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore"        Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
+
+    <!-- Logging -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

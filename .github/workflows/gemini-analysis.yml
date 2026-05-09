@@ -1,0 +1,59 @@
+name: Gemini AI Code Review
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+jobs:
+  analyze:
+    runs-on: windows-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # مهم جداً لعمل git diff بشكل صحيح
+
+    - name: Run Gemini Analysis
+      shell: pwsh
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: |
+        # تشغيل التحليل وحفظ النتيجة
+        .\gemini.ps1 -GitDiff -Save
+
+    - name: Get Analysis Content
+      if: github.event_name == 'pull_request'
+      id: get_report
+      shell: pwsh
+      run: |
+        $reportFile = Get-ChildItem -Path GeminiAnalysis -Filter "*.md" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($reportFile) {
+            $content = Get-Content $reportFile.FullName -Raw
+            # تنظيف المحتوى ليناسب تعليقات GitHub (إزالة العناوين الكبيرة المتكررة)
+            $content = $content -replace '# Gemini Analysis: .*', '🤖 **Gemini AI Code Review Report**'
+            
+            # حفظ المحتوى في ملف مؤقت للخطوة التالية
+            $content | Out-File -FilePath pr_report.md -Encoding UTF8
+            echo "report_found=true" >> $env:GITHUB_OUTPUT
+        } else {
+            echo "report_found=false" >> $env:GITHUB_OUTPUT
+        }
+
+    - name: Post Comment to PR
+      if: github.event_name == 'pull_request' && steps.get_report.outputs.report_found == 'true'
+      uses: peter-evans/create-or-update-comment@v3
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        body-path: pr_report.md
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: gemini-analysis-reports
+        path: GeminiAnalysis/

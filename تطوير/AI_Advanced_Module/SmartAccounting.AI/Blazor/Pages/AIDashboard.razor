@@ -1,0 +1,469 @@
+@page "/ai-dashboard"
+@using SmartAccounting.AI.Interfaces
+@using SmartAccounting.AI.Models
+@inject IAIDashboardService DashboardService
+@inject ISalesForecastService SalesService
+@inject IInventoryRiskService InventoryService
+@inject ICashFlowForecastService CashFlowService
+@inject ICustomerSegmentService CustomerService
+@inject IAnomalyDetectionService AnomalyService
+
+<PageTitle>لوحة تحكم الذكاء الاصطناعي - Smart Accounting</PageTitle>
+
+<div class="ai-dashboard" dir="rtl">
+
+    <!-- ===== الهيدر ===== -->
+    <div class="dashboard-header">
+        <div class="header-info">
+            <h1 class="dashboard-title">
+                <span class="ai-icon">🤖</span>
+                لوحة تحكم الذكاء الاصطناعي
+            </h1>
+            <p class="dashboard-subtitle">
+                تحليلات ذكية مدعومة بـ Microsoft ML.NET
+                @if (_dashboard != null)
+                {
+                    <span class="last-updated"> | آخر تحديث: @_dashboard.LastUpdated.ToString("dd/MM/yyyy HH:mm")</span>
+                }
+            </p>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-retrain @(_isRetraining ? "loading" : "")"
+                    @onclick="RetrainAllModels"
+                    disabled="@_isRetraining">
+                @if (_isRetraining)
+                {
+                    <span class="spinner"></span>
+                    <span>جاري التدريب... @_trainingPercent%</span>
+                }
+                else
+                {
+                    <span>🔄 إعادة تدريب النماذج</span>
+                }
+            </button>
+            <button class="btn btn-refresh" @onclick="LoadDashboard" disabled="@_isLoading">
+                @(_isLoading ? "⏳ جاري التحميل..." : "🔃 تحديث")
+            </button>
+        </div>
+    </div>
+
+    <!-- ===== شريط التدريب ===== -->
+    @if (_isRetraining)
+    {
+        <div class="training-progress-bar">
+            <div class="training-bar-fill" style="width: @_trainingPercent%"></div>
+            <span class="training-message">@_trainingMessage</span>
+        </div>
+    }
+
+    @if (_isLoading && _dashboard == null)
+    {
+        <div class="loading-container">
+            <div class="ai-loader">
+                <div class="loader-ring"></div>
+                <p>يعمل الذكاء الاصطناعي على تحليل البيانات...</p>
+            </div>
+        </div>
+    }
+    else if (_dashboard != null)
+    {
+        <!-- ===== بطاقات الصحة ===== -->
+        <div class="health-cards">
+            <div class="health-card @GetAccuracyClass(_dashboard.HealthMetrics.SalesPredictionAccuracy)">
+                <div class="card-icon">📈</div>
+                <div class="card-info">
+                    <span class="card-label">دقة توقع المبيعات</span>
+                    <span class="card-value">@(_dashboard.HealthMetrics.SalesPredictionAccuracy * 100):F1}%</span>
+                </div>
+            </div>
+            <div class="health-card @GetAccuracyClass(_dashboard.HealthMetrics.CashFlowAccuracy)">
+                <div class="card-icon">💰</div>
+                <div class="card-info">
+                    <span class="card-label">دقة التدفق النقدي</span>
+                    <span class="card-value">@($"{_dashboard.HealthMetrics.CashFlowAccuracy * 100:F1}%")</span>
+                </div>
+            </div>
+            <div class="health-card @(_dashboard.HealthMetrics.TotalAnomaliesDetected > 0 ? "card-warning" : "card-good")">
+                <div class="card-icon">🔍</div>
+                <div class="card-info">
+                    <span class="card-label">الشذوذات المكتشفة</span>
+                    <span class="card-value">@_dashboard.HealthMetrics.TotalAnomaliesDetected</span>
+                </div>
+            </div>
+            <div class="health-card @(_dashboard.HealthMetrics.ModelsNeedRetraining ? "card-warning" : "card-good")">
+                <div class="card-icon">🗓️</div>
+                <div class="card-info">
+                    <span class="card-label">آخر تدريب</span>
+                    <span class="card-value">
+                        @(_dashboard.HealthMetrics.ModelsLastTrainedDaysAgo == 999
+                            ? "لم يتم بعد"
+                            : $"منذ {_dashboard.HealthMetrics.ModelsLastTrainedDaysAgo} يوم")
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== التبويبات الرئيسية ===== -->
+        <div class="tabs-container">
+            <div class="tabs-header">
+                @foreach (var (tab, icon, label) in _tabs)
+                {
+                    <button class="tab-btn @(_activeTab == tab ? "active" : "")"
+                            @onclick="() => _activeTab = tab">
+                        <span>@icon</span> @label
+                    </button>
+                }
+            </div>
+
+            <!-- تاب: توقع المبيعات -->
+            @if (_activeTab == "sales")
+            {
+                <div class="tab-content">
+                    <h2 class="section-title">📈 توقعات المبيعات - 6 أشهر قادمة</h2>
+                    <div class="forecast-chart">
+                        @foreach (var item in _dashboard.SalesForecast)
+                        {
+                            var maxVal = _dashboard.SalesForecast.Max(f => (double)f.UpperBound);
+                            var barHeight = maxVal > 0 ? (double)item.PredictedAmount / maxVal * 100 : 0;
+                            <div class="forecast-bar-wrap">
+                                <div class="forecast-bar-container">
+                                    <div class="forecast-confidence"
+                                         style="height: @((double)item.UpperBound / maxVal * 100)%; bottom: @((double)item.LowerBound / maxVal * 100)%"></div>
+                                    <div class="forecast-bar" style="height: @barHeight%">
+                                        <span class="bar-value">@item.PredictedAmount.ToString("N0")</span>
+                                    </div>
+                                </div>
+                                <span class="bar-label">@item.ForecastDate.ToString("MMM")</span>
+                            </div>
+                        }
+                    </div>
+                    <div class="forecast-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>الشهر</th>
+                                    <th>المبيعات المتوقعة</th>
+                                    <th>الحد الأدنى</th>
+                                    <th>الحد الأقصى</th>
+                                    <th>مستوى الثقة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var f in _dashboard.SalesForecast)
+                                {
+                                    <tr>
+                                        <td>@f.Period</td>
+                                        <td class="amount">@f.PredictedAmount.ToString("N2") ج.م</td>
+                                        <td class="amount-low">@f.LowerBound.ToString("N2") ج.م</td>
+                                        <td class="amount-high">@f.UpperBound.ToString("N2") ج.م</td>
+                                        <td>
+                                            <div class="confidence-badge">@(f.ConfidenceLevel * 100:F0}%")</div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            <!-- تاب: مخاطر المخزون -->
+            @if (_activeTab == "inventory")
+            {
+                <div class="tab-content">
+                    <h2 class="section-title">📦 تحليل مخاطر المخزون</h2>
+                    <div class="risk-summary">
+                        <div class="risk-stat critical">
+                            <span class="risk-count">@_dashboard.HighRiskInventory.Count(r => r.RiskLevel == RiskLevel.Critical)</span>
+                            <span class="risk-label">حرج</span>
+                        </div>
+                        <div class="risk-stat high">
+                            <span class="risk-count">@_dashboard.HighRiskInventory.Count(r => r.RiskLevel == RiskLevel.High)</span>
+                            <span class="risk-label">عالي</span>
+                        </div>
+                        <div class="risk-stat medium">
+                            <span class="risk-count">@_dashboard.HighRiskInventory.Count(r => r.RiskLevel == RiskLevel.Medium)</span>
+                            <span class="risk-label">متوسط</span>
+                        </div>
+                    </div>
+
+                    @if (_dashboard.HighRiskInventory.Any())
+                    {
+                        <div class="inventory-cards">
+                            @foreach (var item in _dashboard.HighRiskInventory.Take(20))
+                            {
+                                <div class="inventory-card risk-@item.RiskLevel.ToString().ToLower()">
+                                    <div class="inv-header">
+                                        <span class="inv-code">@item.ProductCode</span>
+                                        <span class="risk-badge @item.RiskLevel.ToString().ToLower()">
+                                            @GetRiskLabel(item.RiskLevel)
+                                        </span>
+                                    </div>
+                                    <div class="inv-name">@item.ProductName</div>
+                                    <div class="inv-stats">
+                                        <div class="inv-stat">
+                                            <span class="stat-label">المخزون</span>
+                                            <span class="stat-value">@item.CurrentStock.ToString("N0") وحدة</span>
+                                        </div>
+                                        <div class="inv-stat">
+                                            <span class="stat-label">القيمة</span>
+                                            <span class="stat-value">@item.CurrentValue.ToString("N0") ج.م</span>
+                                        </div>
+                                        <div class="inv-stat">
+                                            <span class="stat-label">آخر بيع</span>
+                                            <span class="stat-value">@item.DaysSinceLastSale يوم</span>
+                                        </div>
+                                    </div>
+                                    <div class="risk-score-bar">
+                                        <div class="risk-fill" style="width: @(item.RiskScore * 100)%"></div>
+                                    </div>
+                                    <div class="inv-recommendation">@item.Recommendation</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="no-risk-msg">✅ لا توجد منتجات ذات مخاطر عالية حالياً.</div>
+                    }
+                </div>
+            }
+
+            <!-- تاب: التدفق النقدي -->
+            @if (_activeTab == "cashflow")
+            {
+                <div class="tab-content">
+                    <h2 class="section-title">💰 توقعات التدفق النقدي</h2>
+
+                    @if (_dashboard.CashFlowForecast.Any(f => !string.IsNullOrEmpty(f.Alert)))
+                    {
+                        <div class="alerts-container">
+                            @foreach (var alert in _dashboard.CashFlowForecast.Where(f => !string.IsNullOrEmpty(f.Alert)))
+                            {
+                                <div class="cash-alert @(alert.CumulativeCashFlow < 0 ? "alert-danger" : "alert-warning")">
+                                    @alert.Alert — @alert.ForecastMonth.ToString("MMMM yyyy")
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <div class="cashflow-chart">
+                        @foreach (var cf in _dashboard.CashFlowForecast)
+                        {
+                            var maxAbs = _dashboard.CashFlowForecast.Max(f => Math.Abs((double)f.PredictedNetCashFlow));
+                            var barH = maxAbs > 0 ? Math.Abs((double)cf.PredictedNetCashFlow) / maxAbs * 80 : 0;
+                            <div class="cf-bar-wrap">
+                                <div class="cf-bar @(cf.PredictedNetCashFlow >= 0 ? "cf-positive" : "cf-negative")"
+                                     style="height: @barH%">
+                                    <span class="cf-value">@cf.PredictedNetCashFlow.ToString("N0")</span>
+                                </div>
+                                <span class="cf-label">@cf.ForecastMonth.ToString("MMM")</span>
+                            </div>
+                        }
+                    </div>
+
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>الشهر</th>
+                                <th>المتوقع الوارد</th>
+                                <th>المتوقع الصادر</th>
+                                <th>صافي التدفق</th>
+                                <th>الرصيد التراكمي</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cf in _dashboard.CashFlowForecast)
+                            {
+                                <tr class="@(cf.IsNegative ? "row-danger" : "")">
+                                    <td>@cf.ForecastMonth.ToString("MMMM yyyy")</td>
+                                    <td class="amount">@cf.ExpectedInflow.ToString("N2")</td>
+                                    <td class="amount">@cf.ExpectedOutflow.ToString("N2")</td>
+                                    <td class="@(cf.PredictedNetCashFlow >= 0 ? "amount-high" : "amount-low")">
+                                        @cf.PredictedNetCashFlow.ToString("N2")
+                                    </td>
+                                    <td class="@(cf.CumulativeCashFlow >= 0 ? "amount-high" : "amount-low")">
+                                        @cf.CumulativeCashFlow.ToString("N2")
+                                    </td>
+                                    <td>@(cf.IsNegative ? "⚠️ سلبي" : "✅ إيجابي")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <!-- تاب: تقسيم العملاء -->
+            @if (_activeTab == "customers")
+            {
+                <div class="tab-content">
+                    <h2 class="section-title">👥 تقسيم وتحليل العملاء</h2>
+
+                    <div class="segment-overview">
+                        @foreach (var seg in Enum.GetValues<CustomerSegment>())
+                        {
+                            var count = _dashboard.CustomerSegments.Count(c => c.Segment == seg);
+                            <div class="segment-card seg-@seg.ToString().ToLower()">
+                                <div class="seg-icon">@GetSegmentIcon(seg)</div>
+                                <div class="seg-count">@count</div>
+                                <div class="seg-label">@GetSegmentLabel(seg)</div>
+                            </div>
+                        }
+                    </div>
+
+                    @{
+                        var atRisk = _dashboard.CustomerSegments
+                            .Where(c => c.Segment == CustomerSegment.AtRisk || c.Segment == CustomerSegment.Lost)
+                            .Take(15).ToList();
+                    }
+                    @if (atRisk.Any())
+                    {
+                        <h3 class="subsection-title">⚠️ العملاء المحتاجون لمتابعة فورية</h3>
+                        <div class="customer-cards">
+                            @foreach (var customer in atRisk)
+                            {
+                                <div class="customer-card seg-@customer.Segment.ToString().ToLower()">
+                                    <div class="cust-name">@customer.CustomerName</div>
+                                    <div class="cust-badge">@customer.SegmentLabel</div>
+                                    <div class="cust-stats">
+                                        <span>💰 @customer.TotalPurchases.ToString("N0") ج.م</span>
+                                        <span>🛒 @customer.PurchaseFrequency مرة</span>
+                                        <span>📅 منذ @customer.DaysSinceLastPurchase يوم</span>
+                                    </div>
+                                    <div class="cust-action">@customer.RecommendedAction</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- تاب: كشف الشذوذ -->
+            @if (_activeTab == "anomalies")
+            {
+                <div class="tab-content">
+                    <h2 class="section-title">🔍 كشف الشذوذ في المعاملات</h2>
+
+                    @if (_dashboard.RecentAnomalies.Any())
+                    {
+                        <div class="anomaly-list">
+                            @foreach (var anomaly in _dashboard.RecentAnomalies)
+                            {
+                                <div class="anomaly-card">
+                                    <div class="anomaly-header">
+                                        <span class="anomaly-date">@anomaly.TransactionDate.ToString("dd/MM/yyyy")</span>
+                                        <span class="anomaly-score">
+                                            درجة الشذوذ: @anomaly.AnomalyScore.ToString("F3")
+                                        </span>
+                                    </div>
+                                    <div class="anomaly-desc">@anomaly.Description</div>
+                                    <div class="anomaly-amounts">
+                                        <span class="actual-amount">المبلغ الفعلي: <strong>@anomaly.Amount.ToString("N2")</strong></span>
+                                        <span class="expected-amount">المتوقع: <strong>@anomaly.ExpectedAmount.ToString("N0")</strong></span>
+                                    </div>
+                                    <div class="anomaly-reason">@anomaly.AnomalyReason</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="no-anomaly-msg">
+                            ✅ لم يتم اكتشاف أي شذوذ في المعاملات الأخيرة.
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private AIInsightsDashboard? _dashboard;
+    private bool _isLoading = false;
+    private bool _isRetraining = false;
+    private int _trainingPercent = 0;
+    private string _trainingMessage = string.Empty;
+    private string _activeTab = "sales";
+
+    private readonly (string key, string icon, string label)[] _tabs = new[]
+    {
+        ("sales",     "📈", "توقع المبيعات"),
+        ("inventory", "📦", "مخاطر المخزون"),
+        ("cashflow",  "💰", "التدفق النقدي"),
+        ("customers", "👥", "تقسيم العملاء"),
+        ("anomalies", "🔍", "كشف الشذوذ"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboard();
+    }
+
+    private async Task LoadDashboard()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            _dashboard = await DashboardService.GetFullDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"خطأ في تحميل لوحة التحكم: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RetrainAllModels()
+    {
+        _isRetraining = true;
+        _trainingPercent = 0;
+        StateHasChanged();
+
+        var progress = new Progress<TrainingProgress>(p =>
+        {
+            _trainingPercent = p.ProgressPercent;
+            _trainingMessage = p.StatusMessage;
+            InvokeAsync(StateHasChanged);
+        });
+
+        await DashboardService.RetrainAllModelsAsync(progress);
+        _isRetraining = false;
+        await LoadDashboard();
+    }
+
+    private string GetAccuracyClass(double accuracy) =>
+        accuracy >= 0.8 ? "card-good" : accuracy >= 0.6 ? "card-warning" : "card-bad";
+
+    private string GetRiskLabel(RiskLevel level) => level switch
+    {
+        RiskLevel.Critical => "⛔ حرج",
+        RiskLevel.High     => "🔴 عالي",
+        RiskLevel.Medium   => "🟡 متوسط",
+        _                  => "🟢 منخفض"
+    };
+
+    private string GetSegmentIcon(CustomerSegment seg) => seg switch
+    {
+        CustomerSegment.VIP     => "⭐",
+        CustomerSegment.Regular => "✅",
+        CustomerSegment.AtRisk  => "⚠️",
+        CustomerSegment.Lost    => "❌",
+        _                       => "❓"
+    };
+
+    private string GetSegmentLabel(CustomerSegment seg) => seg switch
+    {
+        CustomerSegment.VIP     => "عملاء VIP",
+        CustomerSegment.Regular => "عملاء منتظمون",
+        CustomerSegment.AtRisk  => "في خطر",
+        CustomerSegment.Lost    => "مفقودون",
+        _                       => "غير محدد"
+    };
+}

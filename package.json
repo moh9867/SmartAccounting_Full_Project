@@ -1,0 +1,14 @@
+{
+  "name": "smartaccounting_full_projec",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "ai": "npm run ai --prefix Source/07-Agent",
+    "start-agent": "dotnet run --project Source/07-Agent/SmartAccountingAgent.csproj"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
